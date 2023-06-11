@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 
-using Abot.Poco;
+using Abot2.Poco;
 
 namespace AzureSearchCrawler
 {

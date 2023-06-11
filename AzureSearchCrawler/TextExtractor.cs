@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using HtmlAgilityPack;
+using AngleSharp.Dom;
+using AngleSharp.XPath;
 
 namespace AzureSearchCrawler
 {
@@ -17,14 +18,14 @@ namespace AzureSearchCrawler
         private readonly Regex newlines = new Regex(@"(\r\n|\n)+");
         private readonly Regex spaces = new Regex(@"[ \t]+");
 
-        public virtual string ExtractText(HtmlDocument doc)
+        public virtual string ExtractText(IDocument doc)
         {
             return GetCleanedUpTextForXpath(doc, "//body");
         }
 
-        public string GetCleanedUpTextForXpath(HtmlDocument doc, string xpath)
+        public string GetCleanedUpTextForXpath(IDocument doc, string xpath)
         {
-            if (doc == null || doc.DocumentNode == null)
+            if (doc == null || doc.Body == null)
             {
                 return null;
             }
@@ -46,36 +47,36 @@ namespace AzureSearchCrawler
             return spaces.Replace(content, " ");
         }
 
-        protected void RemoveNodesOfType(HtmlDocument doc, params string[] types)
+        protected void RemoveNodesOfType(IDocument doc, params string[] types)
         {
             string xpath = String.Join(" | ", types.Select(t => "//" + t));
             RemoveNodes(doc, xpath);
         }
 
-        protected void RemoveNodes(HtmlDocument doc, string xpath)
+        protected void RemoveNodes(IDocument doc, string xpath)
         {
             var nodes = SafeSelectNodes(doc, xpath).ToList();
             // Console.WriteLine("Removing {0} nodes matching {1}.", nodes.Count, xpath);
             foreach (var node in nodes)
             {
-                node.Remove();
+                node.Parent.RemoveChild(node);
             }
         }
 
         /// <summary>
-        /// Returns InnerText of the first element matching the xpath expression, or null if no elements match.
+        /// Returns TextContent of the first element matching the xpath expression, or null if no elements match.
         /// </summary>
-        protected string ExtractTextFromFirstMatchingElement(HtmlDocument doc, string xpath)
+        protected string ExtractTextFromFirstMatchingElement(IDocument doc, string xpath)
         {
-            return SafeSelectNodes(doc, xpath).FirstOrDefault()?.InnerText;
+            return SafeSelectNodes(doc, xpath).FirstOrDefault()?.TextContent;
         }
 
         /// <summary>
         /// Null-safe DocumentNode.SelectNodes
         /// </summary>
-        protected IEnumerable<HtmlNode> SafeSelectNodes(HtmlDocument doc, string xpath)
+        protected IEnumerable<INode> SafeSelectNodes(IDocument doc, string xpath)
         {
-            return doc.DocumentNode.SelectNodes(xpath) ?? Enumerable.Empty<HtmlNode>();
+            return doc.Body.SelectNodes(xpath) ?? Enumerable.Empty<INode>();
         }
     }
 }

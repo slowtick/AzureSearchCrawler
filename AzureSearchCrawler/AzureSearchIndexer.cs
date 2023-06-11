@@ -4,9 +4,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Abot.Poco;
-using Microsoft.Azure.Search;
-using Microsoft.Azure.Search.Models;
+using Abot2.Poco;
+using Azure.Search.Documents;
 
 namespace AzureSearchCrawler
 {
@@ -20,7 +19,7 @@ namespace AzureSearchCrawler
         private const int IndexingBatchSize = 25;
 
         private TextExtractor _textExtractor;
-        private ISearchIndexClient _indexClient;
+        private SearchClient _indexClient;
 
         private BlockingCollection<WebPage> _queue = new BlockingCollection<WebPage>();
         private SemaphoreSlim indexingLock = new SemaphoreSlim(1, 1);
@@ -29,18 +28,24 @@ namespace AzureSearchCrawler
         {
             _textExtractor = textExtractor;
 
-            SearchServiceClient serviceClient = new SearchServiceClient(serviceName, new SearchCredentials(adminApiKey));
-            _indexClient = serviceClient.Indexes.GetClient(indexName);
+            Uri uri = new Uri($"https://{serviceName}.search.windows.net");
+            _indexClient = new SearchClient(uri, indexName, new Azure.AzureKeyCredential(adminApiKey));
         }
 
         public async Task PageCrawledAsync(CrawledPage crawledPage)
         {
-            string text = _textExtractor.ExtractText(crawledPage.HtmlDocument);
+            string text = _textExtractor.ExtractText(crawledPage.AngleSharpHtmlDocument);
             if (text == null)
             {
                 Console.WriteLine("No content for page {0}", crawledPage?.Uri.AbsoluteUri);
                 return;
             }
+            text = text.Trim()
+            .Replace("<p>&nbsp;</p>", "\n").Replace("<p>", "\n").Replace("</p>", "\n")
+            .Replace("DATA PROTECTION CAREERS TERMS OF USE COPYRIGHT NOTICES CONTACT US SINGTEL GLOBAL OFFICES STORE LOCATOR © Singtel (CRN: 199201624D) All Rights Reserved.", "")
+            .Trim();
+
+            Console.WriteLine("Content extracted for page {0} is: {1}", crawledPage?.Uri.AbsoluteUri, text);
 
             _queue.Add(new WebPage(crawledPage.Uri.AbsoluteUri, text));
 
@@ -61,7 +66,7 @@ namespace AzureSearchCrawler
             }
         }
 
-        private async Task<DocumentIndexResult> IndexBatchIfNecessary()
+        private async Task<Azure.Search.Documents.Models.IndexDocumentsResult> IndexBatchIfNecessary()
         {
             await indexingLock.WaitAsync();
 
@@ -80,8 +85,8 @@ namespace AzureSearchCrawler
                 {
                     pages.Add(_queue.Take());
                 }
-                var batch = IndexBatch.MergeOrUpload(pages);
-                return await _indexClient.Documents.IndexAsync(batch);
+                var batch = Azure.Search.Documents.Models.IndexDocumentsBatch.MergeOrUpload(pages);
+                return await _indexClient.IndexDocumentsAsync(batch);
             }
             finally
             {
@@ -89,7 +94,6 @@ namespace AzureSearchCrawler
             }
         }
 
-        [SerializePropertyNamesAsCamelCase]
         public class WebPage
         {
             public WebPage(string url, string content)

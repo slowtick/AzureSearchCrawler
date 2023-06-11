@@ -3,8 +3,8 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Abot.Crawler;
-using Abot.Poco;
+using Abot2.Crawler;
+using Abot2.Poco;
 
 namespace AzureSearchCrawler
 {
@@ -25,12 +25,16 @@ namespace AzureSearchCrawler
 
         public async Task Crawl(string rootUri, int maxPages)
         {
-            PoliteWebCrawler crawler = new PoliteWebCrawler(CreateCrawlConfiguration(maxPages), null, null, null, null, null, null, null, null);
+            var crawlConfig = new CrawlConfiguration
+            {
+                MaxPagesToCrawl = maxPages,
+            };
+            PoliteWebCrawler crawler = new PoliteWebCrawler(crawlConfig, null, null, null, null, null, null, null, null);
 
-            crawler.PageCrawlStartingAsync += crawler_ProcessPageCrawlStarting;
-            crawler.PageCrawlCompletedAsync += crawler_ProcessPageCrawlCompleted;
+            crawler.PageCrawlStarting += crawler_ProcessPageCrawlStarting;
+            crawler.PageCrawlCompleted += crawler_ProcessPageCrawlCompleted;
 
-            CrawlResult result = crawler.Crawl(new Uri(rootUri)); //This is synchronous, it will not go to the next line until the crawl has completed
+            CrawlResult result = await crawler.CrawlAsync(new Uri(rootUri)); //This is synchronous, it will not go to the next line until the crawl has completed
             if (result.ErrorOccurred)
             {
                 Console.WriteLine("Crawl of {0} ({1} pages) completed with error: {2}", result.RootUri.AbsoluteUri, PageCount, result.ErrorException.Message);
@@ -56,9 +60,9 @@ namespace AzureSearchCrawler
             CrawledPage crawledPage = e.CrawledPage;
             string uri = crawledPage.Uri.AbsoluteUri;
 
-            if (crawledPage.WebException != null || crawledPage.HttpWebResponse?.StatusCode != HttpStatusCode.OK)
+            if (crawledPage.HttpRequestException != null || crawledPage.HttpResponseMessage?.StatusCode != HttpStatusCode.OK)
             {
-                Console.WriteLine("Crawl of page failed {0}: exception '{1}', response status {2}", uri, crawledPage.WebException?.Message, crawledPage.HttpWebResponse?.StatusCode);
+                Console.WriteLine("Crawl of page failed {0}: exception '{1}', response status {2}", uri, crawledPage.HttpRequestException?.Message, crawledPage.HttpResponseMessage?.StatusCode);
                 return;
             }
 
